@@ -16,6 +16,21 @@ jobs:
         run: |
           echo "=== СОДЕРЖИМОЕ ПАПКИ ==="
           ls -la
+          echo ""
+          echo "=== ПРОВЕРКА main.py ==="
+          if [ -f "main.py" ]; then
+            echo "✅ main.py найден"
+          else
+            echo "❌ main.py НЕ НАЙДЕН!"
+            exit 1
+          fi
+          echo "=== ПРОВЕРКА buildozer.spec ==="
+          if [ -f "buildozer.spec" ]; then
+            echo "✅ buildozer.spec найден"
+          else
+            echo "❌ buildozer.spec НЕ НАЙДЕН!"
+            exit 1
+          fi
       
       - name: ☕ Установка Java
         uses: actions/setup-java@v4
@@ -28,7 +43,7 @@ jobs:
         with:
           python-version: '3.11'
           
-      - name: 📦 Установка системных зависимостей (исправленная версия)
+      - name: 📦 Установка зависимостей
         run: |
           sudo apt update
           sudo apt install -y \
@@ -43,78 +58,52 @@ jobs:
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            libtinfo6 \
+            libncurses-dev \
             cmake \
             libffi-dev \
             libssl-dev \
             wget \
-            curl \
-            libncurses-dev
+            curl
           
-      - name: 📦 Установка Android SDK
-        run: |
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip commandlinetools-linux-9477386_latest.zip
-          mkdir -p android-sdk/cmdline-tools
-          mv cmdline-tools android-sdk/cmdline-tools/latest
-          export ANDROID_HOME=$PWD/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
-          
-          # Принимаем лицензии
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0"
-          
-      - name: 📦 Установка Python пакетов
+      - name: 📦 Установка Buildozer
         run: |
           python -m pip install --upgrade pip
-          pip install --user buildozer cython==0.29.33
+          pip install --user buildozer cython
           
-      - name: 🔧 Создание .buildozer.spec если нет
-        run: |
-          if [ ! -f "buildozer.spec" ]; then
-            echo "❌ buildozer.spec не найден!"
-            exit 1
-          fi
-          
-      - name: 🔧 Исправление buildozer.spec для совместимости
-        run: |
-          # Добавляем принятие лицензий в spec если там нет
-          if ! grep -q "android.accept_sdk_license" buildozer.spec; then
-            echo "android.accept_sdk_license = True" >> buildozer.spec
-          fi
-          
-      - name: 🔧 Сборка APK
+      - name: 🔧 Сборка APK с полным логом
         run: |
           export PATH=$PATH:~/.local/bin
           echo "=== НАЧАЛО СБОРКИ ==="
-          buildozer android debug 2>&1 | tee build.log
+          buildozer android debug > build.log 2>&1 || true
+          echo "=== КОНЕЦ СБОРКИ ==="
           
-      - name: 📋 Анализ лога
-        if: always()
+      - name: 🔍 Поиск APK после сборки
+        run: |
+          echo "=== ПОИСК APK ФАЙЛОВ ==="
+          find . -name "*.apk" -type f
+          echo ""
+          echo "=== СОДЕРЖИМОЕ ПАПКИ BIN (если есть) ==="
+          ls -la bin/ || echo "Папки bin нет"
+          echo ""
+          echo "=== СОДЕРЖИМОЕ ВСЕХ ПАПОК ==="
+          find . -type d | head -20
+          
+      - name: 📋 Анализ лога сборки
         run: |
           echo "=== ПОСЛЕДНИЕ 50 СТРОК ЛОГА ==="
-          if [ -f "build.log" ]; then
-            tail -n 50 build.log
-            echo ""
-            echo "=== ПОИСК ОШИБОК ==="
-            grep -i "error\|exception\|failed" build.log | tail -n 20 || echo "Ошибок не найдено"
-          else
-            echo "❌ Файл build.log не создался"
-          fi
+          tail -50 build.log
+          echo ""
+          echo "=== ПОИСК ОШИБОК В ЛОГЕ ==="
+          grep -i "error\|exception\|failed" build.log | tail -20 || echo "Явных ошибок не найдено"
           
       - name: 📤 Загрузка лога
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
           
-      - name: 📤 Загрузка APK
-        if: success()
+      - name: 📤 Загрузка APK (если найден)
         uses: actions/upload-artifact@v4
         with:
           name: telegram-proxy-apk
-          path: bin/*.apk
+          path: "**/*.apk"
