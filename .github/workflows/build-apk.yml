@@ -30,37 +30,30 @@ jobs:
       
       - name: Verify Buildozer
         run: |
-          which buildozer || echo "Buildozer not found"
-          buildozer --version || echo "Buildozer failed to run"
+          which buildozer
+          buildozer --version
       
-      - name: Create simple buildozer.spec
+      - name: Show files
         run: |
-          echo "[app]" > buildozer.spec
-          echo "title = Telegram Proxy" >> buildozer.spec
-          echo "package.name = telegramproxy" >> buildozer.spec
-          echo "package.domain = org.example" >> buildozer.spec
-          echo "source.dir = ." >> buildozer.spec
-          echo "source.include_exts = py,png,jpg,kv,atxt" >> buildozer.spec
-          echo "version = 1.0" >> buildozer.spec
-          echo "requirements = python3,kivy" >> buildozer.spec
-          echo "orientation = portrait" >> buildozer.spec
-          echo "android.permissions = INTERNET" >> buildozer.spec
-          echo "android.api = 30" >> buildozer.spec
-          echo "android.minapi = 21" >> buildozer.spec
-          echo "android.ndk = 23b" >> buildozer.spec
-          echo "android.archs = arm64-v8a" >> buildozer.spec
-          echo "" >> buildozer.spec
-          echo "[buildozer]" >> buildozer.spec
-          echo "log_level = 2" >> buildozer.spec
+          ls -la
+          echo "=== Содержимое buildozer.spec ==="
+          cat buildozer.spec || echo "buildozer.spec не найден"
       
-      - name: Try to build
+      - name: Build APK
         run: |
-          buildozer init
-          echo "Buildozer initialized"
+          export PATH=$PATH:~/.local/bin
+          buildozer android debug
       
-      - name: Upload build log
-        if: always()
+      - name: Find and upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-proxy-apk
+          path: bin/*.apk
+      
+      - name: Upload build log on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: buildozer.spec
+          path: build.log
