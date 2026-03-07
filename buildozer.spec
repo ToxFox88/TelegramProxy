@@ -1,6 +1,6 @@
 [app]
 # Имя приложения
-title = Telegram Local Proxy
+title = Telegram Proxy
 
 # Уникальный идентификатор
 package.name = telegramproxy
@@ -8,30 +8,33 @@ package.domain = org.example
 
 # Исходный файл
 source.dir = .
-source.include_exts = py,png,jpg,kv,atxt
+source.include_exts = py,png,jpg,kv,atxt,txt
 
 # Версия
 version = 1.0
 
 # Требования
-requirements = python3,kivy,openssl
+requirements = python3,kivy
 
-# Ориентация
+# Ориентация экрана
 orientation = portrait
 
 # Разрешения
-android.permissions = INTERNET,ACCESS_NETWORK_STATE
+android.permissions = INTERNET
+
+# Настройки Android (исправлено)
 android.api = 33
 android.minapi = 21
 android.ndk = 25b
-android.sdk = 33
+android.archs = arm64-v8a
+android.accept_sdk_license = True
 
-# Настройки
-android.arch = arm64-v8a
-android.allow_backup = True
-
-# Режим отладки
+# Отладка
 android.debug = True
+android.logcat_filters = *:S python:D
+
+# Графика
+android.wakelock = True
 
 [buildozer]
 log_level = 2
