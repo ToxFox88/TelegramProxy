@@ -12,26 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: 📁 Проверка файлов
-        run: |
-          echo "=== СОДЕРЖИМОЕ ПАПКИ ==="
-          ls -la
-          echo ""
-          echo "=== ПРОВЕРКА main.py ==="
-          if [ -f "main.py" ]; then
-            echo "✅ main.py найден"
-          else
-            echo "❌ main.py НЕ НАЙДЕН!"
-            exit 1
-          fi
-          echo "=== ПРОВЕРКА buildozer.spec ==="
-          if [ -f "buildozer.spec" ]; then
-            echo "✅ buildozer.spec найден"
-          else
-            echo "❌ buildozer.spec НЕ НАЙДЕН!"
-            exit 1
-          fi
-      
       - name: ☕ Установка Java
         uses: actions/setup-java@v4
         with:
@@ -43,14 +23,13 @@ jobs:
         with:
           python-version: '3.11'
           
-      - name: 📦 Установка зависимостей
+      - name: 📦 Установка системных зависимостей
         run: |
           sudo apt update
           sudo apt install -y \
             git \
             zip \
             unzip \
-            openjdk-17-jdk \
             python3-pip \
             autoconf \
             libtool \
@@ -58,51 +37,100 @@ jobs:
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            libncurses-dev \
             cmake \
             libffi-dev \
             libssl-dev \
             wget \
-            curl
+            curl \
+            software-properties-common
+          
+      - name: 🤖 Установка Android SDK (полная версия)
+        run: |
+          # Скачиваем командную строку Android SDK
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip commandlinetools-linux-9477386_latest.zip
+          
+          # Создаем структуру папок
+          mkdir -p android-sdk/cmdline-tools
+          mv cmdline-tools android-sdk/cmdline-tools/latest
+          
+          # Устанавливаем переменные окружения
+          export ANDROID_HOME=$PWD/android-sdk
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          
+          # Сохраняем в GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          
+          # Принимаем все лицензии
+          yes | sdkmanager --licenses
+          
+          # Устанавливаем все необходимые компоненты
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-31" \
+            "platforms;android-32" \
+            "platforms;android-33" \
+            "build-tools;30.0.3" \
+            "build-tools;31.0.0" \
+            "build-tools;32.0.0" \
+            "build-tools;33.0.0" \
+            "ndk;25.2.9519653"
+          
+          # Проверяем установку
+          echo "=== ПРОВЕРКА УСТАНОВКИ ==="
+          which aidl || echo "AIDL не найден!"
+          find $ANDROID_HOME -name "aidl" -type f 2>/dev/null || echo "AIDL не найден в файловой системе"
           
       - name: 📦 Установка Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install --user buildozer cython
           
-      - name: 🔧 Сборка APK с полным логом
+      - name: 🔧 Исправление buildozer.spec
         run: |
-          export PATH=$PATH:~/.local/bin
-          echo "=== НАЧАЛО СБОРКИ ==="
-          buildozer android debug > build.log 2>&1 || true
-          echo "=== КОНЕЦ СБОРКИ ==="
+          # Добавляем настройки для Android SDK
+          if ! grep -q "android.accept_sdk_license" buildozer.spec; then
+            echo "android.accept_sdk_license = True" >> buildozer.spec
+          fi
           
-      - name: 🔍 Поиск APK после сборки
+          # Указываем пути к SDK
+          if ! grep -q "android.sdk_path" buildozer.spec; then
+            echo "android.sdk_path = $ANDROID_HOME" >> buildozer.spec
+          fi
+          
+          # Указываем архитектуры
+          if ! grep -q "android.archs" buildozer.spec; then
+            echo "android.archs = arm64-v8a" >> buildozer.spec
+          fi
+          
+          echo "=== ИТОГОВЫЙ buildozer.spec ==="
+          cat buildozer.spec
+          
+      - name: 🔧 Сборка APK
+        run: |
+          export PATH=$PATH:~/.local/bin:$ANDROID_HOME/build-tools/33.0.0
+          echo "=== НАЧАЛО СБОРКИ ==="
+          buildozer android debug 2>&1 | tee build.log
+          
+      - name: 🔍 Поиск APK
         run: |
           echo "=== ПОИСК APK ФАЙЛОВ ==="
           find . -name "*.apk" -type f
           echo ""
-          echo "=== СОДЕРЖИМОЕ ПАПКИ BIN (если есть) ==="
+          echo "=== СОДЕРЖИМОЕ ПАПКИ BIN ==="
           ls -la bin/ || echo "Папки bin нет"
-          echo ""
-          echo "=== СОДЕРЖИМОЕ ВСЕХ ПАПОК ==="
-          find . -type d | head -20
-          
-      - name: 📋 Анализ лога сборки
-        run: |
-          echo "=== ПОСЛЕДНИЕ 50 СТРОК ЛОГА ==="
-          tail -50 build.log
-          echo ""
-          echo "=== ПОИСК ОШИБОК В ЛОГЕ ==="
-          grep -i "error\|exception\|failed" build.log | tail -20 || echo "Явных ошибок не найдено"
           
       - name: 📤 Загрузка лога
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
           
-      - name: 📤 Загрузка APK (если найден)
+      - name: 📤 Загрузка APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: telegram-proxy-apk
