@@ -1,6 +1,6 @@
 name: Build APK
 
-on: 
+on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
@@ -10,43 +10,43 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: ☕ Установка Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: 🐍 Установка Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
-      - name: 📦 Установка зависимостей
+      - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev wget curl
           
-      - name: 🤖 Установка Android SDK
+      - name: Install Android SDK
         run: |
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
           unzip commandlinetools-linux-9477386_latest.zip
           mkdir -p android-sdk/cmdline-tools
           mv cmdline-tools android-sdk/cmdline-tools/latest
-          export ANDROID_HOME=$PWD/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "ANDROID_HOME=$PWD/android-sdk" >> $GITHUB_ENV
+          echo "$PWD/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          export PATH=$PATH:$PWD/android-sdk/cmdline-tools/latest/bin
           yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
           
-      - name: 📦 Установка Buildozer
+      - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install --user buildozer cython
           
-      - name: 📝 Создание правильного buildozer.spec
+      - name: Create buildozer.spec
         run: |
           cat > buildozer.spec << 'EOF'
 [app]
@@ -65,46 +65,34 @@ android.ndk = 25b
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.debug = True
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
 EOF
-          echo "✅ buildozer.spec создан"
-          cat buildozer.spec
           
-      - name: 🔧 Сборка APK
+      - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
-          echo "=== НАЧАЛО СБОРКИ ==="
-          buildozer android debug 2>&1 | tee build.log
-          echo "=== КОНЕЦ СБОРКИ ==="
+          buildozer android debug > build.log 2>&1
           
-      - name: 🔍 ПОИСК APK (УЛУЧШЕННЫЙ)
+      - name: Find APK
         run: |
-          echo "=== ПОИСК ВСЕХ APK ФАЙЛОВ ==="
-          find . -name "*.apk" -type f -ls
-          echo ""
-          echo "=== КОПИРОВАНИЕ APK В ИЗВЕСТНОЕ МЕСТО ==="
-          mkdir -p apk-output
-          find . -name "*.apk" -type f -exec cp {} apk-output/ \;
-          ls -la apk-output/
-          echo ""
-          echo "=== ЕСЛИ APK НЕ НАЙДЕН, ИЩЕМ ГЛУБЖЕ ==="
-          find . -type d -name "bin" -exec ls -la {} \; || echo "Папки bin нет"
-          find . -type d -name "build" -exec ls -la {} \; || echo "Папки build нет"
+          echo "Searching for APK files..."
+          find . -name "*.apk" -type f -exec cp {} ./ \;
+          ls -la *.apk || echo "No APK found"
           
-      - name: 📤 Загрузка APK (гарантированно)
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: telegram-proxy-apk
-          path: |
-            **/*.apk
-            apk-output/*.apk
+          path: "*.apk"
           if-no-files-found: warn
           
-      - name: 📤 Загрузка лога
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
+          if-no-files-found: warn
