@@ -44,3 +44,5 @@ buildozer android debug
 
 ## Результат
 APK файл будет в папке `bin/`
+
+test
